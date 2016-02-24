@@ -111,7 +111,9 @@ int main1(int argc, char **argv) {
     trainingset.getCodec(codec);
     print("got", codec.size(), "classes");
 
-    clstm.target_height = int(getrenv("target_height", 48));
+    clstm.target_height = int(getrenv("target_height", 45));
+    // Add option for normalization style
+    clstm.dewarp = getsenv("dewarp", "none");
     clstm.createBidi(codec.codec, getienv("nhidden", 100));
     clstm.setLearningRate(getdenv("lrate", 1e-4), getdenv("momentum", 0.9));
   }
@@ -134,13 +136,18 @@ int main1(int argc, char **argv) {
   save_trigger.enable(save_name != "").skip0();
   Trigger report_trigger(getienv("report_every", 100), ntrain, start);
   Trigger display_trigger(getienv("display_every", 0), ntrain, start);
-
+  
+  // Add log for training error evolution.
+  double train_errors = 0.0;
+  double train_count = 0.0;
   for (int trial = start; trial < ntrain; trial++) {
     int sample = lrand48() % trainingset.size();
     Tensor2 raw;
     wstring gt;
     trainingset.readSample(raw, gt, sample);
     wstring pred = clstm.train(raw(), gt);
+    train_count += gt.size();
+    train_errors += lenvenshtein(pred, gt);
 
     if (report_trigger(trial)) {
       print(trial);
@@ -167,6 +174,14 @@ int main1(int argc, char **argv) {
       double errors = tse.first;
       double count = tse.second;
       test_error = errors / count;
+      double train_error;
+      if (train_errors > 0)
+        train_error = train_count / train_errors;
+      else
+        train_error = 9999.0;
+      print("Train ERROR: ", train_error);
+      train_count = 0.0;
+      train_errors = 0.0;
       print("ERROR", trial, test_error, "   ", errors, count);
       if (test_error < best_error) {
         best_error = test_error;
