@@ -31,7 +31,7 @@ using std::min;
 // text line normalization
 
 struct INormalizer {
-  int target_height = 48;
+  int target_height; // = 48;
   float smooth2d = 1.0;
   float smooth1d = 0.3;
   float range = 4.0;
