@@ -46,6 +46,10 @@ int main1(int argc, char **argv) {
   string load_name = getsenv("load", "");
   if (load_name == "") THROW("must give load= parameter");
   CLSTMOCR clstm;
+  // open options for input text-line dimension, 
+  // as well as normalization style. 
+  clstm.target_height = int(getrenv("target_height", 45));
+  clstm.dewarp = getsenv("dewarp", "none");
   clstm.load(load_name);
 
   bool conf = getienv("conf", 0);
