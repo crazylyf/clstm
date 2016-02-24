@@ -146,8 +146,9 @@ struct CLSTMText {
 struct CLSTMOCR {
   shared_ptr<INormalizer> normalizer;
   Network net;
-  int target_height = 48;
+  int target_height;// = 48; // to avoid unwanted values.
   int nclasses = -1;
+  string dewarp;  // Option for text-line normalization
   Sequence aligned, targets;
   Tensor2 image;
   void setLearningRate(float lr, float mom) { net->setLearningRate(lr, mom); }
@@ -161,7 +162,7 @@ struct CLSTMOCR {
       return false;
     }
     nclasses = net->codec.size();
-    normalizer.reset(make_CenterNormalizer());
+    normalizer.reset(make_Normalizer(dewarp));
     normalizer->target_height = target_height;
     return true;
   }
@@ -194,7 +195,7 @@ struct CLSTMOCR {
                             {"nhidden", nhidden}});
     net->initialize();
     net->codec.set(codec);
-    normalizer.reset(make_CenterNormalizer());
+    normalizer.reset(make_Normalizer(dewarp));
     normalizer->target_height = target_height;
   }
   std::wstring fwdbwd(TensorMap2 raw, const std::wstring &target) {
