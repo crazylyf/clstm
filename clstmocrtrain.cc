@@ -65,6 +65,19 @@ struct Dataset {
     for (auto s : fnames) gtnames.push_back(basename(s) + ".gt.txt");
     codec.build(gtnames, charsep);
   }
+  void getCodec(Codec &codec, vector<string> file_lists) {
+    // get codec from several files, including training files, validation files, 
+    // and perhaps testing files, in order to avoid unrecognized codecs
+    vector<string> gts;
+    for (int i=0; i<file_lists.size(); i++) {
+      vector<string> temp_names;
+      read_lines(temp_names, file_lists[i]);
+      for (auto s : temp_names) gts.push_back(basename(s) + ".gt.txt");
+    }
+    // build the codecs
+    codec.build(gts, charsep);
+  }
+
   void readSample(Tensor2 &raw, wstring &gt, int index) {
     string fname = fnames[index];
     string base = basename(fname);
@@ -92,12 +105,19 @@ int main1(int argc, char **argv) {
   int ntrain = getienv("ntrain", 10000000);
   string save_name = getsenv("save_name", "_ocr");
   int report_time = getienv("report_time", 0);
+  // vector storing the training and testing files
+  vector<string> file_lists;
 
   if (argc < 2 || argc > 3) THROW("... training [testing]");
   Dataset trainingset(argv[1]);
+  file_lists.push_back(argv[1]);
   assert(trainingset.size() > 0);
   Dataset testset;
-  if (argc > 2) testset.readFileList(argv[2]);
+  if (argc > 2) {
+    testset.readFileList(argv[2]);
+    file_lists.push_back(argv[2]);
+  }
+  
   print("got", trainingset.size(), "files,", testset.size(), "tests");
 
   string load_name = getsenv("load", "");
@@ -108,15 +128,16 @@ int main1(int argc, char **argv) {
     clstm.load(load_name);
   } else {
     Codec codec;
-    trainingset.getCodec(codec);
+    //trainingset.getCodec(codec);
+    trainingset.getCodec(codec, file_lists);    // use all ground truth files
     print("got", codec.size(), "classes");
 
     clstm.target_height = int(getrenv("target_height", 45));
-    // Add option for normalization style
     clstm.dewarp = getsenv("dewarp", "none");
     clstm.createBidi(codec.codec, getienv("nhidden", 100));
     clstm.setLearningRate(getdenv("lrate", 1e-4), getdenv("momentum", 0.9));
   }
+  file_lists.clear();   // clear the file_lists vector
   network_info(clstm.net);
 
   double test_error = 9999.0;
@@ -136,8 +157,7 @@ int main1(int argc, char **argv) {
   save_trigger.enable(save_name != "").skip0();
   Trigger report_trigger(getienv("report_every", 100), ntrain, start);
   Trigger display_trigger(getienv("display_every", 0), ntrain, start);
-  
-  // Add log for training error evolution.
+
   double train_errors = 0.0;
   double train_count = 0.0;
   for (int trial = start; trial < ntrain; trial++) {
@@ -147,7 +167,7 @@ int main1(int argc, char **argv) {
     trainingset.readSample(raw, gt, sample);
     wstring pred = clstm.train(raw(), gt);
     train_count += gt.size();
-    train_errors += lenvenshtein(pred, gt);
+    train_errors += levenshtein(pred, gt);
 
     if (report_trigger(trial)) {
       print(trial);
@@ -174,15 +194,16 @@ int main1(int argc, char **argv) {
       double errors = tse.first;
       double count = tse.second;
       test_error = errors / count;
+      print("ERROR", trial, test_error, "   ", errors, count);
       double train_error;
       if (train_errors > 0)
-        train_error = train_count / train_errors;
+         train_error = train_count / train_errors;
       else
-        train_error = 9999.0;
+         train_error = 9999.0;
       print("Train ERROR: ", train_error);
       train_count = 0.0;
       train_errors = 0.0;
-      print("ERROR", trial, test_error, "   ", errors, count);
+
       if (test_error < best_error) {
         best_error = test_error;
         string fname = save_name + ".clstm";
